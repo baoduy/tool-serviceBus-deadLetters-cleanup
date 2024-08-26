@@ -1,0 +1,6 @@
+﻿services:
+  servicebusdeadletterscleanup:
+    image: servicebusdeadletterscleanup
+    build:
+      context: .
+      dockerfile: Dockerfile
