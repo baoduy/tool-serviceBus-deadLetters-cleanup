@@ -1,0 +1,20 @@
+name: Docker Image CI
+
+on:
+  push:
+    branches: [ "main" ]
+
+jobs:
+
+  build:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Push Docker image
+      run: |
+        docker build -f ServiceBusDeadLettersCleanup/Dockerfile -t baoduy2412/servicebus-cleanup:latest ./ServiceBusDeadLettersCleanup
+        docker login -u baoduy2412 -p ${{ secrets.DOCKER_TOKEN }}
+        docker push baoduy2412/servicebus-cleanup:latest
