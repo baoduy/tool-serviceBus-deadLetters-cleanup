@@ -1,20 +1,16 @@
 using Azure.Messaging.ServiceBus.Administration;
 using Microsoft.Extensions.Options;
 using ServiceBusDeadLettersCleanup.ServiceBus.Configs;
-
-namespace ServiceBusDeadLettersCleanup.ServiceBus;
-
 using Azure.Messaging.ServiceBus;
 using Azure.Storage.Blobs;
-using System;
-using System.Text;
-using System.Threading.Tasks;
+
+namespace ServiceBusDeadLettersCleanup.ServiceBus;
 
 /// <summary>
 /// ServiceBusBackgroundService is a background service that listens to dead-letter queues
 /// of Azure Service Bus topics and writes the dead-letter messages to Azure Blob Storage.
 /// </summary>
-public class ServiceBusBackgroundService(IOptions<BusConfig> busConfig, IOptions<StorageConfig> storageConfig)
+public class SubscriptionCleanupService(IOptions<BusConfig> busConfig, IOptions<StorageConfig> storageConfig)
     : BackgroundService
 {
     // Blob container client for interacting with Azure Blob Storage
@@ -25,7 +21,7 @@ public class ServiceBusBackgroundService(IOptions<BusConfig> busConfig, IOptions
     private readonly ServiceBusAdministrationClient _busAdminClient = new(busConfig.Value.ConnectionString);
 
     // Service Bus client for interacting with Service Bus
-    private readonly ServiceBusClient _busClient = new ServiceBusClient(busConfig.Value.ConnectionString);
+    private readonly ServiceBusClient _busClient = new(busConfig.Value.ConnectionString);
 
     /// <summary>
     /// Starts listening to the dead-letter queue of a specific topic and subscription.
@@ -38,9 +34,8 @@ public class ServiceBusBackgroundService(IOptions<BusConfig> busConfig, IOptions
 
         // Construct the dead-letter queue path
         var deadLetterPath = $"{topicName}/Subscriptions/{subscriptionName}/$DeadLetterQueue";
-
         // Create a processor for the dead-letter queue
-        var processor = _busClient.CreateProcessor(deadLetterPath, new ServiceBusProcessorOptions());
+        var processor = _busClient.CreateProcessor(deadLetterPath, new ServiceBusProcessorOptions{ReceiveMode = ServiceBusReceiveMode.ReceiveAndDelete,PrefetchCount = 10,});
 
         // Event handler for processing messages
         processor.ProcessMessageAsync += async args =>
@@ -55,6 +50,7 @@ public class ServiceBusBackgroundService(IOptions<BusConfig> busConfig, IOptions
         processor.ProcessErrorAsync += args =>
         {
             Console.WriteLine($"Error processing message: {args.Exception.Message}");
+            //TODO: remove processor for not found sub.
             return Task.CompletedTask;
         };
 
@@ -93,22 +89,17 @@ public class ServiceBusBackgroundService(IOptions<BusConfig> busConfig, IOptions
         await _storageClient.CreateIfNotExistsAsync(cancellationToken: stoppingToken);
 
         // Retrieve all topics from the Service Bus
-        var topics = _busAdminClient.GetTopicsAsync().AsPages(pageSizeHint: 10);
+        var topics = _busAdminClient.GetTopicsAsync(stoppingToken).AsPages(pageSizeHint: 10);
         await foreach (var tps in topics)
+        foreach (var tp in tps.Values)
         {
-            foreach (var tp in tps.Values)
-            {
-                // Retrieve all subscriptions for each topic
-                var subscriptions = _busAdminClient.GetSubscriptionsAsync(tp.Name).AsPages(pageSizeHint: 10);
-                await foreach (var subs in subscriptions)
-                {
-                    foreach (var sub in subs.Values)
-                    {
-                        // Start listening to the dead-letter queue for each subscription
-                        await StartListeningToDeadLetterQueueAsync(tp.Name, sub.SubscriptionName);
-                    }
-                }
-            }
+            // Retrieve all subscriptions for each topic
+            var subscriptions = _busAdminClient.GetSubscriptionsAsync(tp.Name, stoppingToken)
+                .AsPages(pageSizeHint: 10);
+            await foreach (var subs in subscriptions)
+            foreach (var sub in subs.Values)
+                // Start listening to the dead-letter queue for each subscription
+                await StartListeningToDeadLetterQueueAsync(tp.Name, sub.SubscriptionName);
         }
     }
 

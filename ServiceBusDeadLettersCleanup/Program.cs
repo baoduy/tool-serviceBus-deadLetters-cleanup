@@ -4,7 +4,7 @@ using ServiceBusDeadLettersCleanup.ServiceBus.Configs;
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddConfigs();
-builder.Services.AddHostedService<ServiceBusBackgroundService>();
+builder.Services.AddHostedService<SubscriptionCleanupService>();
 
 var app = builder.Build();
 app.Run();
