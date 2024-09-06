@@ -71,7 +71,7 @@ public sealed class QueueCleanupService(IOptions<BusConfig> busConfig, IOptions<
     private async Task WriteMessageToBlobAsync(string queueName, ServiceBusReceivedMessage message)
     {
         // Construct the blob name using the topic, subscription, and message ID
-        var blobName = $"queues/{queueName}/{message.MessageId}.txt";
+        var blobName = $"queues/{queueName}/{message.MessageId}.json";
         var blobClient = _storageClient.GetBlobClient(blobName);
 
         var data = message.ToMessage();

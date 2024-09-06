@@ -74,7 +74,7 @@ public sealed class SubscriptionCleanupService(IOptions<BusConfig> busConfig, IO
         ServiceBusReceivedMessage message)
     {
         // Construct the blob name using the topic, subscription, and message ID
-        var blobName = $"topics/{topicName}/{subscriptionName}/{message.MessageId}.txt";
+        var blobName = $"topics/{topicName}/{subscriptionName}/{message.MessageId}.json";
         var blobClient = _storageClient.GetBlobClient(blobName);
 
         var data = message.ToMessage();
