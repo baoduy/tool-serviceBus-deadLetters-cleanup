@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Azure.Messaging.ServiceBus;
 
 namespace ServiceBusDeadLettersCleanup.ServiceBus;
@@ -16,5 +17,11 @@ public static class Extensions
         }
 
         return message;
+    }
+
+    public static Stream ToStream(this Message message)
+    {
+        var data = JsonSerializer.SerializeToUtf8Bytes(message, new JsonSerializerOptions { WriteIndented = false });
+        return new MemoryStream(data);
     }
 }

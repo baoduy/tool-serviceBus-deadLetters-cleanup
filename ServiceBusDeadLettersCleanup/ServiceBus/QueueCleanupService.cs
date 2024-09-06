@@ -11,7 +11,7 @@ namespace ServiceBusDeadLettersCleanup.ServiceBus;
 /// SubscriptionCleanupService is a background service that listens to dead-letter queues
 /// of Azure Service Bus topics and writes the dead-letter messages to Azure Blob Storage.
 /// </summary>
-public class QueueCleanupService(IOptions<BusConfig> busConfig, IOptions<StorageConfig> storageConfig)
+public sealed class QueueCleanupService(IOptions<BusConfig> busConfig, IOptions<StorageConfig> storageConfig)
     : BackgroundService, IAsyncDisposable
 {
     // Blob container client for interacting with Azure Blob Storage
@@ -71,14 +71,12 @@ public class QueueCleanupService(IOptions<BusConfig> busConfig, IOptions<Storage
     private async Task WriteMessageToBlobAsync(string queueName, ServiceBusReceivedMessage message)
     {
         // Construct the blob name using the topic, subscription, and message ID
-        var blobName = $"{queueName}/{message.MessageId}.txt";
+        var blobName = $"queues/{queueName}/{message.MessageId}.txt";
         var blobClient = _storageClient.GetBlobClient(blobName);
 
         var data = message.ToMessage();
-
-        await blobClient.UploadAsync(
-            JsonSerializer.Serialize(data, new JsonSerializerOptions { WriteIndented = false }),
-            overwrite: true);
+        await using var stream = data.ToStream();
+        await blobClient.UploadAsync(stream, overwrite: true);
 
         Console.WriteLine($"Dead-letter message written to blob {blobName}");
     }
@@ -119,7 +117,7 @@ public class QueueCleanupService(IOptions<BusConfig> busConfig, IOptions<Storage
         await base.StopAsync(stoppingToken);
     }
 
-    protected virtual async ValueTask DisposeAsyncCore() => await StopAsync(CancellationToken.None);
+    private async ValueTask DisposeAsyncCore() => await StopAsync(CancellationToken.None);
 
     public async ValueTask DisposeAsync()
     {
