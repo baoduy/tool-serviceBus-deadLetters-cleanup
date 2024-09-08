@@ -1,0 +1,1 @@
+docker build -t drunk/bus-cleanup:latest -f Dockerfile ./
