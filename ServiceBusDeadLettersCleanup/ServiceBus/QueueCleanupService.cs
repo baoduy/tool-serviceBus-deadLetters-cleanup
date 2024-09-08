@@ -11,7 +11,7 @@ namespace ServiceBusDeadLettersCleanup.ServiceBus;
 /// SubscriptionCleanupService is a background service that listens to dead-letter queues
 /// of Azure Service Bus topics and writes the dead-letter messages to Azure Blob Storage.
 /// </summary>
-public sealed class SubscriptionCleanupService(IOptions<BusConfig> busConfig, IOptions<StorageConfig> storageConfig)
+public sealed class QueueCleanupService(IOptions<BusConfig> busConfig, IOptions<StorageConfig> storageConfig)
     : BackgroundService, IAsyncDisposable
 {
     // Blob container client for interacting with Azure Blob Storage
@@ -28,25 +28,24 @@ public sealed class SubscriptionCleanupService(IOptions<BusConfig> busConfig, IO
     /// <summary>
     /// Starts listening to the dead-letter queue of a specific topic and subscription.
     /// </summary>
-    /// <param name="topicName">The name of the topic.</param>
-    /// <param name="subscriptionName">The name of the subscription.</param>
-    private async Task StartListeningToDeadLetterQueueAsync(string topicName, string subscriptionName)
+    /// <param name="queueName">The name of the topic.</param>
+    private async Task StartListeningToDeadLetterQueueAsync(string queueName)
     {
-        Console.WriteLine($"Processing: {topicName}/{subscriptionName}");
+        Console.WriteLine($"Processing Queue: {queueName}");
 
         // Construct the dead-letter queue path
-        var deadLetterPath = $"{topicName}/Subscriptions/{subscriptionName}/$DeadLetterQueue";
+        var deadLetterPath = $"{queueName}/$DeadLetterQueue";
         // Create a processor for the dead-letter queue
         var processor = _busClient.CreateProcessor(deadLetterPath,
             new ServiceBusProcessorOptions
                 { ReceiveMode = ServiceBusReceiveMode.ReceiveAndDelete, PrefetchCount = 10, });
-        _processors.Add($"{topicName}-{subscriptionName}", processor);
+        _processors.Add(queueName, processor);
 
         // Event handler for processing messages
         processor.ProcessMessageAsync += async args =>
         {
             // Write the message to Azure Blob Storage
-            await WriteMessageToBlobAsync(topicName, subscriptionName, args.Message);
+            await WriteMessageToBlobAsync(queueName, args.Message);
             // Complete the message to remove it from the queue
             await args.CompleteMessageAsync(args.Message);
         };
@@ -61,20 +60,18 @@ public sealed class SubscriptionCleanupService(IOptions<BusConfig> busConfig, IO
 
         // Start processing messages
         await processor.StartProcessingAsync();
-        Console.WriteLine($"Started listening to DLQ: {topicName}/{subscriptionName}");
+        Console.WriteLine($"Started listening to DLQ: {queueName}");
     }
 
     /// <summary>
     /// Writes a dead-letter message to Azure Blob Storage.
     /// </summary>
-    /// <param name="topicName">The name of the topic.</param>
-    /// <param name="subscriptionName">The name of the subscription.</param>
+    /// <param name="queueName">The name of the topic.</param>
     /// <param name="message">The received Service Bus message.</param>
-    private async Task WriteMessageToBlobAsync(string topicName, string subscriptionName,
-        ServiceBusReceivedMessage message)
+    private async Task WriteMessageToBlobAsync(string queueName, ServiceBusReceivedMessage message)
     {
         // Construct the blob name using the topic, subscription, and message ID
-        var blobName = $"topics/{topicName}/{subscriptionName}/{message.MessageId}.json";
+        var blobName = $"queues/{queueName}/{message.MessageId}.json";
         var blobClient = _storageClient.GetBlobClient(blobName);
 
         var data = message.ToMessage();
@@ -94,17 +91,11 @@ public sealed class SubscriptionCleanupService(IOptions<BusConfig> busConfig, IO
         await _storageClient.CreateIfNotExistsAsync(cancellationToken: stoppingToken);
 
         // Retrieve all topics from the Service Bus
-        var topics = _busAdminClient.GetTopicsAsync(stoppingToken).AsPages(pageSizeHint: 10);
-        await foreach (var tps in topics)
-        foreach (var tp in tps.Values)
+        var topics = _busAdminClient.GetQueuesAsync(stoppingToken).AsPages(pageSizeHint: 10);
+        await foreach (var queues in topics)
+        foreach (var queue in queues.Values)
         {
-            // Retrieve all subscriptions for each topic
-            var subscriptions = _busAdminClient.GetSubscriptionsAsync(tp.Name, stoppingToken)
-                .AsPages(pageSizeHint: 10);
-            await foreach (var subs in subscriptions)
-            foreach (var sub in subs.Values)
-                // Start listening to the dead-letter queue for each subscription
-                await StartListeningToDeadLetterQueueAsync(tp.Name, sub.SubscriptionName);
+            await StartListeningToDeadLetterQueueAsync(queue.Name);
         }
     }
 
