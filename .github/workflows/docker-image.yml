@@ -1,20 +1,18 @@
-name: Docker Image CI
+name: pulumi-docker-build
 
 on:
   push:
-    branches: [ "main" ]
+    branches:
+    - 'main'
 
 jobs:
-
   build:
-
-    runs-on: ubuntu-latest
-
-    steps:
-    - uses: actions/checkout@v3
-    
-    - name: Push Docker image
-      run: |
-        docker build -f ServiceBusDeadLettersCleanup/Dockerfile -t baoduy2412/servicebus-cleanup:latest ./ServiceBusDeadLettersCleanup
-        docker login -u baoduy2412 -p ${{ secrets.DOCKER_TOKEN }}
-        docker push baoduy2412/servicebus-cleanup:latest
+    uses: baoduy/ShareWorkflows/.github/workflows/docker-publish.yaml@main
+    with:
+      dockerFile: 'ServiceBusDeadLettersCleanup/Dockerfile'
+      context: './ServiceBusDeadLettersCleanup'
+      imageName: 'baoduy2412/servicebus-cleanup'
+      platforms: linux/arm64,linux/amd64
+    secrets:
+      DOCKER_USERNAME: baoduy2412
+      DOCKER_TOKEN: ${{ secrets.DOCKER_TOKEN }}
