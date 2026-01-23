@@ -13,6 +13,18 @@ public sealed class BusConfig
     // The connection string for the Service Bus, required and cannot be empty
     [Required(AllowEmptyStrings = false)]
     public string ConnectionString { get; set; } = default!;
+    
+    // Optional: Include only these queues/topics (null means all)
+    public string[]? IncludeQueues { get; set; }
+    public string[]? IncludeTopics { get; set; }
+    
+    // Optional: Exclude these queues/topics
+    public string[]? ExcludeQueues { get; set; }
+    public string[]? ExcludeTopics { get; set; }
+    
+    // Processor configuration
+    public int PrefetchCount { get; set; } = 50;
+    public int MaxConcurrentCalls { get; set; } = 10;
 }
 
 /// <summary>
