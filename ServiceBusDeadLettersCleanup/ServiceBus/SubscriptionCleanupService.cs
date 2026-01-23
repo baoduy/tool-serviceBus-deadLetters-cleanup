@@ -193,7 +193,6 @@ public sealed class SubscriptionCleanupService(
 
         _processors.Clear();
         await _busClient.DisposeAsync();
-        await _busAdminClient.DisposeAsync();
         
         logger.LogInformation("SubscriptionCleanupService stopped");
         await base.StopAsync(stoppingToken);
